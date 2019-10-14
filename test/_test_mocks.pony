@@ -2,45 +2,54 @@ use "ponytest"
 use "collections"
 use "../mocks"
 
-primitive Arguments0
-    new create() => None
+//// BEGIN PSUDO-GENERATED CODE ////
 
-class Arguments1[A: Any #read]
-    let _a: A
-    new create(a: A) =>
-        _a = a
+// Given an actor or class to stub:
+// for each public (constructor | function | behaviour) as item
+//   generate private field: '_calls_${item.name}' as an array of ArgumentsN
+//   generate private field: '_stub_${item.name}' as an array of item.return_type
+//   generate stub/mock with $item.signature
+//   generate stubbing/mocking functions if the item is a class
+//   generate stubbing/mocking behaviours if the item is an actor
+//   generate accessors as functions if the item is a class
+//   generate accessors with callbacks if the item is an actor
 
-class Arguments2[A: Any #read, B: Any #read]
-    let _a: A
-    let _b: B
-    new create(a: A, b: B) =>
-        _a = a
-        _b = b
-
-type _CreateArguments is Arguments2[String, String]
-type _WriteArguments is Arguments1[Array[U8] val]
 
 actor StubCutDownTCPConnection is CutDownTCPConnection
-    let _calls_create: Array[_CreateArguments] = Array[_CreateArguments]
-//    let _responses_create: Map[_CreateArguments, Array[None]] = Map[_CreateArguments, Array[None]]
-    let _calls_write: Array[_WriteArguments] = Array[_WriteArguments]
-//    let _responses_create: Map[_WriteArguments, Array[None]] = Map[_WriteArguments, Array[None]]
+    let _calls_create: Array[Arguments2[String, String]] = Array[Arguments2[String, String]]
+    let _calls_write: Array[Arguments1[Array[U8] val] val] = Array[Arguments1[Array[U8] val] val]
     let _calls_access: Array[Arguments0] = Array[Arguments0]
-    let _responses_access_call: USize = 0
-    let _responses_access: Array[U32] = Array[U32]
+    let _stub_access_idx: USize = 0
+    let _stub_access: Array[U32] = Array[U32]
 
+    // STUBS / MOCKS
     new create(host: String, service: String) =>
-        _calls_create.push( Arguments2[String, String](host, service) )
+        _calls_create.push(Arguments2[String, String](host, service))
     be write(data: Array[U8] val) =>
-        _calls_write.push( Arguments1[Array[U8] val](data) )
+        _calls_write.push(recover val Arguments1[Array[U8] val](data) end)
     fun ref access(): U32 =>
+        _calls_access.push(Arguments0)
         try
-            if _responses_access_call < _responses_access.size() then
-                _responses_access.apply(_responses_access_call)?
+            if _stub_access_idx < _stub_access.size() then
+                _stub_access.apply(_stub_access_idx)?
             else
-                _responses_access.apply(_responses_access.size()-1)?
+                _stub_access.apply(_stub_access.size()-1)?
             end
         else 0 end
+
+    // STUBBING/MOCKING behaviours.
+    be add_responses_access(response: U32) =>
+        _stub_access.push(response)  
+
+    // callback for use in assertions.
+    be with_calls_write(cb: {(Array[Arguments1[Array[U8] val] val])} iso) =>
+        let c: Array[Arguments1[Array[U8] val] val] iso = recover iso Array[Arguments1[Array[U8] val] val] end
+        for args in _calls_write.values() do
+            c.push(args)
+        end
+        cb(consume c)
+
+//// BEGIN TEST CODE ////
 
 primitive SomethingTest is TestWrapped
 	fun all_tests(): Array[UnitTest iso] =>
@@ -49,9 +58,22 @@ primitive SomethingTest is TestWrapped
 object iso is UnitTest
 	fun name(): String => ""
 	fun apply(h: TestHelper) =>
+        // SETUP
+        let conn: StubCutDownTCPConnection = StubCutDownTCPConnection("a", "b")
+        let thing_to_test = ThingToTest
+        h.expect_action("foo")
+        h.long_test(1_000_000_000)
 
-		let undertest = None
-		// h.assert_eq[String](undertest, None)
+        // CALL UNDER TEST
+        thing_to_test.connected(conn) // on 'connect', the TCPConnectionHandler immediately writes 'foo'.
+
+        // ASSERT
+        conn.with_calls_write(recover iso {
+            (args: Array[Arguments1[Array[U8] val] val])(h) =>
+                if args.size() >= 1 then
+                    try h.complete_action(String.from_array(args.apply(0)?.a)) end
+                end
+        } end)
 end
 
 ]
